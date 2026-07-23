@@ -1,0 +1,111 @@
+#!/usr/bin/env bash
+
+set -u
+
+model="${1:-jina-code-embeddings:1.5b}"
+base_url="${2:-http://127.0.0.1:11434}"
+cosine_threshold="${COSINE_THRESHOLD:-0.9999}"
+
+fail() {
+	printf 'parallel embedding oracle failed: %s\n' "$*" >&2
+	exit 1
+}
+
+for dependency in curl jq; do
+	command -v "$dependency" >/dev/null 2>&1 || fail "missing dependency: $dependency"
+done
+
+prompts='[
+	"A red fox crosses the frozen river at dawn.",
+	"fn scoreLexicalMatch(query: []const u8) f32",
+	"SELECT document_id FROM embeddings ORDER BY distance LIMIT 10;",
+	"Parallel slots must preserve vector ordering and identity.",
+	"The quick brown fox jumps over the lazy dog.",
+	"Embedding corruption can look valid while poisoning retrieval."
+]'
+
+request_embeddings() {
+	local input_json="$1"
+	local payload
+	payload="$(jq -cn --arg model "$model" --argjson input "$input_json" \
+		'{model: $model, input: $input, truncate: false}')" || return 1
+	curl -fsS \
+		-H 'Content-Type: application/json' \
+		--data-binary "$payload" \
+		"${base_url%/}/api/embed"
+}
+
+serial_vectors='[]'
+while IFS= read -r prompt; do
+	response="$(request_embeddings "[$prompt]")"
+	status=$?
+	(( status == 0 )) || fail "singleton request failed"
+
+	vector="$(jq -ce '.embeddings | select(length == 1) | .[0]' <<<"$response")"
+	status=$?
+	(( status == 0 )) || fail "singleton response did not contain exactly one embedding"
+
+	serial_vectors="$(jq -cn \
+		--argjson vectors "$serial_vectors" \
+		--argjson vector "$vector" \
+		'$vectors + [$vector]')" || fail "could not accumulate singleton vectors"
+done < <(jq -c '.[]' <<<"$prompts")
+
+batch_response="$(request_embeddings "$prompts")"
+status=$?
+(( status == 0 )) || fail "concurrent batch request failed"
+batch_vectors="$(jq -ce '.embeddings' <<<"$batch_response")"
+status=$?
+(( status == 0 )) || fail "batch response did not contain embeddings"
+
+repeat_response="$(request_embeddings "$prompts")"
+status=$?
+(( status == 0 )) || fail "repeated batch request failed"
+repeat_vectors="$(jq -ce '.embeddings' <<<"$repeat_response")"
+status=$?
+(( status == 0 )) || fail "repeated batch response did not contain embeddings"
+
+metrics="$(jq -cn \
+	--argjson serial "$serial_vectors" \
+	--argjson batch "$batch_vectors" \
+	--argjson repeat "$repeat_vectors" '
+	def cosine($a; $b):
+		(reduce range(0; $a | length) as $i
+			({dot: 0, aa: 0, bb: 0};
+			.dot += ($a[$i] * $b[$i]) |
+			.aa += ($a[$i] * $a[$i]) |
+			.bb += ($b[$i] * $b[$i]))) as $s |
+		$s.dot / (($s.aa | sqrt) * ($s.bb | sqrt));
+
+	($serial | length) as $count |
+	($serial[0] | length) as $dimensions |
+	{
+		count: $count,
+		dimensions: $dimensions,
+		shape_valid: (
+			$count > 0 and
+			($batch | length) == $count and
+			($repeat | length) == $count and
+			([range(0; $count) as $i |
+				($serial[$i] | length) == $dimensions and
+				($batch[$i] | length) == $dimensions and
+				($repeat[$i] | length) == $dimensions] | all)
+		),
+		numbers_valid: ([ $serial[][], $batch[][], $repeat[][] | type == "number" ] | all),
+		minimum_cosine: ([range(0; $count) as $i |
+			cosine($serial[$i]; $batch[$i]),
+			cosine($serial[$i]; $repeat[$i])] | min)
+	}' )"
+status=$?
+(( status == 0 )) || fail "could not compare embedding vectors"
+
+valid="$(jq -er --argjson threshold "$cosine_threshold" \
+	'.shape_valid and .numbers_valid and (.minimum_cosine >= $threshold)' <<<"$metrics")"
+status=$?
+(( status == 0 )) && [[ "$valid" == "true" ]] || \
+	fail "vector mismatch: $(jq -c . <<<"$metrics")"
+
+printf 'parallel embedding oracle passed: %s vectors, %s dimensions, minimum cosine %s\n' \
+	"$(jq -r '.count' <<<"$metrics")" \
+	"$(jq -r '.dimensions' <<<"$metrics")" \
+	"$(jq -r '.minimum_cosine' <<<"$metrics")"

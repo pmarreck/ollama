@@ -497,23 +497,26 @@ func (pending *LlmRequest) useLoadedRunner(runner *runnerRef, finished chan *Llm
 	}()
 }
 
+// serialModelFamilies tracks llama.cpp architectures that cannot safely maintain multiple request slots.
+// See https://github.com/ollama/ollama/issues/4165.
+var serialModelFamilies = []string{"mllama", "qwen3vl", "qwen3vlmoe", "qwen35", "qwen35moe", "qwen3next", "lfm2", "lfm2moe", "nemotron_h", "nemotron_h_moe", "nemotron_h_omni"}
+
+// numParallelForModel enables llama.cpp request slots while preserving serial execution for architectures with known unsafe multi-slot state.
+func numParallelForModel(m *Model) int {
+	numParallel := max(int(envconfig.NumParallel()), 1)
+	if slices.Contains(serialModelFamilies, m.Config.ModelFamily) && numParallel != 1 {
+		slog.Warn("model architecture does not currently support parallel requests", "architecture", m.Config.ModelFamily)
+		return 1
+	}
+
+	return numParallel
+}
+
 // load creates a new model based on req and loads it. If requireFull is true then the model must be loaded fully onto GPUs
 // (if any). Returns whether the scheduler needs to evict a model to make this one fit.
 func (s *Scheduler) load(req *LlmRequest, systemInfo ml.SystemInfo, gpus []ml.DeviceInfo, requireFull bool) bool {
-	numParallel := max(int(envconfig.NumParallel()), 1)
+	numParallel := numParallelForModel(req.model)
 	completion := req.model.CheckCapabilities(model.CapabilityCompletion) == nil
-
-	// Embedding models should always be loaded with parallel=1
-	if !completion {
-		numParallel = 1
-	}
-
-	// Some architectures are not safe with num_parallel > 1.
-	// ref: https://github.com/ollama/ollama/issues/4165
-	if slices.Contains([]string{"mllama", "qwen3vl", "qwen3vlmoe", "qwen35", "qwen35moe", "qwen3next", "lfm2", "lfm2moe", "nemotron_h", "nemotron_h_moe", "nemotron_h_omni"}, req.model.Config.ModelFamily) && numParallel != 1 {
-		numParallel = 1
-		slog.Warn("model architecture does not currently support parallel requests", "architecture", req.model.Config.ModelFamily)
-	}
 
 	sessionDuration := envconfig.KeepAlive()
 	if req.sessionDuration != nil {

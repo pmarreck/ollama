@@ -8,6 +8,34 @@
 
 Start building with open models.
 
+## About this fork
+
+This fork removes Ollama's unconditional one-slot limit for embedding models.
+`OLLAMA_NUM_PARALLEL` now controls both completion and embedding concurrency,
+while the upstream list of model architectures with known unsafe multi-slot
+state remains limited to one slot. The default is still one.
+
+The reproducible Nix build pins the matching llama.cpp source. On x86_64 Linux
+the default package enables CUDA for NVIDIA compute capability 8.6; a CPU-only
+package is also available:
+
+```shell
+nix build
+nix build .#cpu
+./test
+```
+
+Before trusting a parallel embedding model, compare its singleton vectors
+against concurrent and repeated batches:
+
+```shell
+nix develop -c ./test_embedding_parallel jina-code-embeddings:1.5b
+```
+
+The oracle checks dimensions, ordering, numeric values, and cosine equivalence.
+This is important because historical parallel-embedding failures sometimes
+returned corrupted vectors rather than an explicit error.
+
 ## Download
 
 ### macOS

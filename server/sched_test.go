@@ -36,6 +36,80 @@ func TestSchedInit(t *testing.T) {
 	s.loadedMu.Unlock()
 }
 
+func TestNumParallelForModel(t *testing.T) {
+	tests := []struct {
+		name      string
+		requested string
+		model     *Model
+		want      int
+	}{
+		{
+			name:      "completion model honors requested parallelism",
+			requested: "3",
+			model: &Model{Config: model.ConfigV2{
+				Capabilities: []string{string(model.CapabilityCompletion)},
+				ModelFamily:  "llama",
+			}},
+			want: 3,
+		},
+		{
+			name:      "embedding model honors requested parallelism",
+			requested: "3",
+			model: &Model{Config: model.ConfigV2{
+				Capabilities: []string{string(model.CapabilityEmbedding)},
+				ModelFamily:  "bert",
+			}},
+			want: 3,
+		},
+		{
+			name:      "unset parallelism defaults to one",
+			requested: "",
+			model: &Model{Config: model.ConfigV2{
+				Capabilities: []string{string(model.CapabilityEmbedding)},
+				ModelFamily:  "bert",
+			}},
+			want: 1,
+		},
+	}
+
+	unsafeFamilies := []string{
+		"mllama",
+		"qwen3vl",
+		"qwen3vlmoe",
+		"qwen35",
+		"qwen35moe",
+		"qwen3next",
+		"lfm2",
+		"lfm2moe",
+		"nemotron_h",
+		"nemotron_h_moe",
+		"nemotron_h_omni",
+	}
+	for _, family := range unsafeFamilies {
+		tests = append(tests, struct {
+			name      string
+			requested string
+			model     *Model
+			want      int
+		}{
+			name:      "unsafe architecture remains serial: " + family,
+			requested: "3",
+			model: &Model{Config: model.ConfigV2{
+				Capabilities: []string{string(model.CapabilityCompletion)},
+				ModelFamily:  family,
+			}},
+			want: 1,
+		})
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("OLLAMA_NUM_PARALLEL", tt.requested)
+			require.Equal(t, tt.want, numParallelForModel(tt.model))
+		})
+	}
+}
+
 func TestSchedLoad(t *testing.T) {
 	ctx, done := context.WithTimeout(t.Context(), 20*time.Millisecond)
 	defer done()

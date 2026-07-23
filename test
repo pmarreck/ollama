@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+
+set -u
+
+run_tests='env \
+	-u OLLAMA_CONTEXT_LENGTH \
+	-u OLLAMA_DEFAULT_MODEL \
+	-u OLLAMA_KEEP_ALIVE \
+	-u OLLAMA_NUM_PARALLEL \
+	go test ./...'
+
+if [[ "$(uname -s)" == "Linux" ]]; then
+	exec nix run .#test-env -- -c "$run_tests"
+fi
+
+exec nix develop -c bash -c "$run_tests"
