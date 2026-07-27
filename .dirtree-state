@@ -1,0 +1,5 @@
+# Dirtree: Stateful directory trees in the CLI for humans and LLMs. https://github.com/pmarreck/dirtree
+ver=1.2
+annotate=[
+	flake.nix = Nix flake: ollama-pmarreck CPU + CUDA (sm_86) packages, devShell, FHS test-env; pins CUDAToolkit_ROOT/CUDA_PATH to an explicit merged toolkit root so nvcc discovery survives CMake >= 4.3 dropping the PATH fallback
+]

@@ -12,3 +12,5 @@
   - Curiosity poke: silent vector corruption matters more than crashes or benchmark speed.
 - [x] Run the reproducible native build and live three-slot CUDA oracle. (2026-07-23 00:07 EDT)
   - Curiosity poke: the runner command must prove `-np 3`, while singleton-versus-batch vectors must remain equivalent rather than merely well-shaped.
+- [x] Pin CUDA toolkit discovery to an explicit merged root so the build survives CMake >= 4.3. (2026-07-27 14:55 EDT)
+  - Curiosity poke: the build "worked" only because nixpkgs happened to ship cmake 4.1.2; discovery that depends on which of three ambient channels wins is not a build, it is a coincidence.
