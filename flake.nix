@@ -23,7 +23,7 @@
 						owner = "ggml-org";
 						repo = "llama.cpp";
 						tag = llamaCppVersion;
-						hash = "sha256-ZHQ9hBnE9GayZRt0jgO4svzaAUfhRUg6cFu5dSe8J1w=";
+						hash = "sha256-HT0QuIFJz5cgH2qinxhtyLEL/RrUpziZuntj/EDQtzI=";
 					};
 					base = if acceleration == "cuda"
 						then pkgs.ollama-cuda.override { cudaArches = [ "sm_86" ]; }
@@ -47,7 +47,7 @@
 					};
 				in base.overrideAttrs (finalAttrs: oldAttrs: {
 					pname = "ollama-pmarreck";
-					version = "0.32.0-pmarreck.1";
+					version = "0.32.13-pmarreck.1";
 					src = self;
 
 					postPatch = ''

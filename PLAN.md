@@ -14,3 +14,5 @@
   - Curiosity poke: the runner command must prove `-np 3`, while singleton-versus-batch vectors must remain equivalent rather than merely well-shaped.
 - [x] Pin CUDA toolkit discovery to an explicit merged root so the build survives CMake >= 4.3. (2026-07-27 14:55 EDT)
   - Curiosity poke: the build "worked" only because nixpkgs happened to ship cmake 4.1.2; discovery that depends on which of three ambient channels wins is not a build, it is a coincidence.
+- [x] Merge Ollama 0.32.13 and llama.cpp b10380 so Muse-Glimmer models load while preserving parallel embedding and deterministic CUDA packaging. (2026-08-14 15:57 EDT)
+  - Curiosity poke: prove the exact downloaded GGUF through the live API after the system generation switches; a successful package build cannot detect a model/runtime mismatch.
