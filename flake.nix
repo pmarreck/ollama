@@ -1,7 +1,7 @@
 {
 	description = "Ollama with opt-in parallel embedding support";
 
-	inputs.nixpkgs.url = "github:NixOS/nixpkgs/753cc8a3a87467296ddd1fa93f0cc3e81120ee46";
+	inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
 
 	outputs = { self, nixpkgs }:
 		let
@@ -23,7 +23,7 @@
 						owner = "ggml-org";
 						repo = "llama.cpp";
 						tag = llamaCppVersion;
-						hash = "sha256-HT0QuIFJz5cgH2qinxhtyLEL/RrUpziZuntj/EDQtzI=";
+						hash = "sha256-yI/oNTMzOO9Cu0xVp0YYbbgvlwTggJAPJMooDfVnMvU=";
 					};
 					base = if acceleration == "cuda"
 						then pkgs.ollama-cuda.override { cudaArches = [ "sm_86" ]; }
@@ -47,24 +47,15 @@
 					};
 				in base.overrideAttrs (finalAttrs: oldAttrs: {
 					pname = "ollama-pmarreck";
-					version = "0.32.13-pmarreck.1";
+					version = "0.34.4-pmarreck.1";
 					src = self;
 
-					postPatch = ''
-						substituteInPlace version/version.go \
-							--replace-fail 0.0.0 '${finalAttrs.version}'
-
-						# These launcher tests install third-party programs through npm.
-						rm cmd/launch/*_test.go
-						rm -r app
-
-						# CMake's FetchContent cannot access the network in the Nix sandbox.
-						cp -r ${llamaCpp} $TMPDIR/llama-cpp-src
-						chmod -R +w $TMPDIR/llama-cpp-src
-						( cd $TMPDIR/llama-cpp-src && \
-							cmake -DPATCH_DIR=$NIX_BUILD_TOP/source/llama/compat \
-								-P $NIX_BUILD_TOP/source/llama/compat/apply-patch.cmake )
-					'';
+					# Reuse Nixpkgs' sandbox staging and compatibility patching with
+					# the llama.cpp revision required by this checkout.
+					passthru = oldAttrs.passthru // {
+						inherit llamaCppVersion;
+						llamaCppSrc = llamaCpp;
+					};
 				} // lib.optionalAttrs (acceleration == "cuda") {
 					# Pin CUDA toolkit discovery to one root that provably contains
 					# bin/nvcc, instead of letting three ambient channels race.
