@@ -182,14 +182,18 @@ var (
 
 func startServer(t *testing.T, ctx context.Context, ollamaHost string) error {
 	// Make sure the server has been built
-	CLIName, err := filepath.Abs("../ollama")
+	CLIName := os.Getenv("OLLAMA_TEST_BINARY")
+	if CLIName == "" {
+		CLIName = "../ollama"
+		if runtime.GOOS == "windows" {
+			CLIName += ".exe"
+		}
+	}
+	CLIName, err := filepath.Abs(CLIName)
 	if err != nil {
 		return fmt.Errorf("failed to get absolute path: %w", err)
 	}
 
-	if runtime.GOOS == "windows" {
-		CLIName += ".exe"
-	}
 	_, err = os.Stat(CLIName)
 	if err != nil {
 		return fmt.Errorf("CLI missing, did you forget to 'go build .' first?  %w", err)
@@ -208,6 +212,10 @@ func startServer(t *testing.T, ctx context.Context, ollamaHost string) error {
 	}
 
 	serverCmd = exec.Command(CLIName, "serve")
+	if stateDir := os.Getenv("OLLAMA_TEST_HOME"); stateDir != "" {
+		// Scope disposable startup keys to the child process.
+		serverCmd.Env = append(os.Environ(), "HOME="+stateDir)
+	}
 	serverCmd.Stderr = &serverLog
 	serverCmd.Stdout = &serverLog
 	go func() {

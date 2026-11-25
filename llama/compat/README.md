@@ -25,13 +25,18 @@ intentionally skipped so a developer can iterate on a local llama.cpp tree.
   small tensor repacking primitives.
 - `001-llama-cpp-hooks.patch` - small additive call-site edits in llama.cpp files.
   It currently touches `src/llama-model-loader.cpp` and `tools/mtmd/clip.cpp`.
+- `002-pooled-embedding-graph-reserve.patch` - backport of llama.cpp PR #27186
+  for pooled graph reservation when the batch size is not divisible by the
+  number of slots. Remove once the pinned llama.cpp contains the fix. See
+  [embedding validation](../../docs/parallel-embedding-validation.md).
 - `compat.cmake` - CMake glue that invokes the shared
   `cmake/apply-git-patches.cmake` idempotent applier (used by
   `llama/server/CMakeLists.txt`) for every `*.patch` under
   this directory by numeric filename order.
 
 The compatibility source files stay in this directory and are linked into the
-fetched llama.cpp targets. The patch file only adds call sites.
+fetched llama.cpp targets. The first patch only adds call sites; the second
+corrects pooled graph sizing.
 
 ## Load-Time Hooks
 

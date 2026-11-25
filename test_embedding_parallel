@@ -4,7 +4,9 @@ set -u
 
 model="${1:-jina-code-embeddings:1.5b}"
 base_url="${2:-http://127.0.0.1:11434}"
-cosine_threshold="${COSINE_THRESHOLD:-0.9999}"
+# Match upstream's requireSimilarEmbedding tolerance; see
+# docs/parallel-embedding-validation.md for the 2026-09-27 owner decision.
+cosine_threshold="${COSINE_THRESHOLD:-0.999}"
 
 fail() {
 	printf 'parallel embedding oracle failed: %s\n' "$*" >&2

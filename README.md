@@ -38,6 +38,13 @@ The oracle checks dimensions, ordering, numeric values, and cosine equivalence.
 This is important because historical parallel-embedding failures sometimes
 returned corrupted vectors rather than an explicit error.
 
+The Go integration suite also checks separate one-slot baselines, shuffled and
+repeated inputs, CPU/CUDA execution, and the actual runner slot count. Its
+`TestEmbeddingParallel` gate verifies exact model hashes at cosine >= `0.999`,
+matching upstream's embedding similarity helper.
+See [embedding validation](docs/parallel-embedding-validation.md) for the Go test
+command, model identities, CI scope, and known limitations.
+
 ## Download
 
 ### macOS
@@ -378,7 +385,7 @@ console.log(response.message.content);
 #### Package Managers
 
 - [Pacman](https://archlinux.org/packages/extra/x86_64/ollama/)
-- [Homebrew](https://formulae.brew.sh/formula/ollama)
+- [Homebrew](https://formulas.brew.sh/formula/ollama)
 - [Nix package](https://search.nixos.org/packages?show=ollama&from=0&size=50&sort=relevance&type=packages&query=ollama)
 - [Helm Chart](https://artifacthub.io/packages/helm/ollama-helm/ollama)
 - [Gentoo](https://github.com/gentoo/guru/tree/master/app-misc/ollama)

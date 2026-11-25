@@ -18,6 +18,11 @@ Tags:
 
 Scope wiring and model selections live in `integration/reg_fast_test.go`, `integration/reg_release_test.go`, and `integration/reg_library_test.go`.
 
+The fork's pinned local-fixture regression, `TestEmbeddingParallel`, uses the
+same suite and server helpers. See [parallel embedding validation](../docs/parallel-embedding-validation.md)
+for the CPU CI check and CPU/CUDA release gate. `OLLAMA_TEST_BINARY` selects a
+packaged executable instead of `../ollama`.
+
 The integration tests have 2 modes of operating.
 
 1. By default, on Unix systems, they will start the server on a random port, run the tests, and then shutdown the server.  On Windows you must ALWAYS run the server on OLLAMA_HOST for the tests to work.

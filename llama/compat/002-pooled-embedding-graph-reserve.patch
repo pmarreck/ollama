@@ -1,0 +1,23 @@
+Backport the graph-reservation fix from llama.cpp PR #27186, commit
+91321ed05416f347101fabc7e12c72f2609680ae, to b11081.
+
+https://github.com/ggml-org/llama.cpp/pull/27186
+Remove when the pinned llama.cpp includes this fix. Keep the live embedding
+regression check: a successful build does not exercise pooled graph sizing.
+
+diff --git a/src/llama-context.cpp b/src/llama-context.cpp
+--- a/src/llama-context.cpp
++++ b/src/llama-context.cpp
+@@ -2446,6 +2446,12 @@ ggml_cgraph * llama_context::graph_reserve(
+         LLAMA_LOG_DEBUG("%s: making n_tokens a multiple of n_seqs - n_tokens = %u, n_seqs = %u, n_outputs = %u\n", __func__, n_tokens, n_seqs, n_outputs);
+     }
+ 
++    // Pooling needs an output for every token, including rounded reserve tokens.
++    // https://github.com/ggml-org/llama.cpp/issues/27175
++    if (cparams.embeddings && cparams.pooling_type != LLAMA_POOLING_TYPE_NONE) {
++        n_outputs = n_tokens;
++    }
++
+     ggml_backend_sched_reset(sched.get());
+ 
+     // when the scheduler is reset, we cannot reuse old graphs, so we reset the previous graph results

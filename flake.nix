@@ -16,6 +16,11 @@
 				config.allowUnfree = true;
 			};
 			llamaCppVersion = nixpkgs.lib.removeSuffix "\n" (builtins.readFile ./LLAMA_CPP_VERSION);
+			embeddingTestModel = pkgs: pkgs.fetchurl {
+				name = "all-minilm.gguf";
+				url = "https://registry.ollama.ai/v2/library/all-minilm/blobs/sha256:797b70c4edf85907fe0a49eb85811256f65fa0f7bf52166b147fd16be2be4662";
+				hash = "sha256-eXtwxO34WQf+CknrhYESVvZfoPe/UhZrFH/Ra+K+RmI=";
+			};
 			mkOllama = { pkgs, acceleration ? null }:
 				let
 					inherit (pkgs) lib;
@@ -47,7 +52,7 @@
 					};
 				in base.overrideAttrs (finalAttrs: oldAttrs: {
 					pname = "ollama-pmarreck";
-					version = "0.34.4-pmarreck.1";
+					version = "0.34.4-pmarreck.2";
 					src = self;
 
 					# Reuse Nixpkgs' sandbox staging and compatibility patching with
@@ -114,6 +119,24 @@
 					cpu = mkOllama { inherit pkgs; };
 				in {
 					inherit cpu;
+					embedding-test-model = embeddingTestModel pkgs;
+					embedding-tests = pkgs.buildGoModule {
+						pname = "ollama-integration-tests";
+						version = "0.34.4-pmarreck.2";
+						src = self;
+						inherit (cpu) vendorHash proxyVendor;
+						doCheck = false;
+						buildPhase = ''
+							runHook preBuild
+							go test -c -tags=integration,release -o integration-tests ./integration
+							runHook postBuild
+						'';
+						installPhase = ''
+							runHook preInstall
+							install -Dm755 integration-tests "$out/bin/integration-tests"
+							runHook postInstall
+						'';
+					};
 					default = if system == "x86_64-linux"
 						then mkOllama { inherit pkgs; acceleration = "cuda"; }
 						else cpu;
@@ -134,9 +157,22 @@
 					};
 				});
 
-			checks = forAllSystems (system: {
-				build = self.packages.${system}.default;
-			});
+			checks = forAllSystems (system:
+				let pkgs = pkgsFor system;
+				in {
+					build = self.packages.${system}.default;
+					embedding = pkgs.runCommand "ollama-embedding-regression" {
+						__darwinAllowLocalNetworking = true;
+					} ''
+						export OLLAMA_TEST_BINARY=${self.packages.${system}.default}/bin/ollama
+						export OLLAMA_TEST_MINILM=${embeddingTestModel pkgs}
+						export OLLAMA_TEST_EMBED_MODE=cpu-regression
+						export OLLAMA_TEST_EMBED_OUTPUT="$out"
+						ulimit -c 0
+						${self.packages.${system}.embedding-tests}/bin/integration-tests \
+							-test.run '^TestEmbeddingParallel' -test.v -test.timeout 30m
+					'';
+				});
 
 			devShells = forAllSystems (system:
 				let pkgs = pkgsFor system;
