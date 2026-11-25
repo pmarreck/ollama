@@ -168,6 +168,7 @@ type llamaServerRunner struct {
 
 	launch                  llamaServerLaunchConfig
 	output                  *memoryParsingWriter
+	logOutput               *runnerLogWriter
 	mmprojOffloadOOMRetried bool
 }
 
@@ -918,10 +919,7 @@ func NewLlamaServerRunner(
 	config.DraftModelPath = splitModel.draftModelPath
 
 	gpuLibs := ml.LibraryPaths(gpus)
-	status := NewStatusWriter(os.Stderr)
-
-	// memWriter wraps the status writer and parses buffer size lines from llama-server logs
-	memWriter := &memoryParsingWriter{inner: status}
+	memWriter, status, logOutput := newRunnerOutput(os.Stderr)
 
 	mediaMarker := newLlamaServerMediaMarker()
 	extraEnvs := ml.GetDevicesEnv(gpus)
@@ -965,6 +963,7 @@ func NewLlamaServerRunner(
 		sem:              semaphore.NewWeighted(int64(numParallel)),
 		launch:           launch,
 		output:           memWriter,
+		logOutput:        logOutput,
 	}
 	// Point the memory parsing writer at this runner so values are updated as logs stream in
 	memWriter.runner = s
@@ -1009,6 +1008,9 @@ func legacyEmbeddingsWereRaw(kv *gguf.Metadata) bool {
 }
 
 func (s *llamaServerRunner) startProcess() error {
+	if s.logOutput != nil {
+		s.logOutput.start()
+	}
 	cmd, port, err := startLlamaServer(s.launch, s.output)
 	if err != nil {
 		return err
@@ -1024,6 +1026,11 @@ func (s *llamaServerRunner) startProcess() error {
 	// Reap subprocess when it exits.
 	go func(cmd *exec.Cmd, done chan struct{}) {
 		err := cmd.Wait()
+		if s.logOutput != nil {
+			if flushErr := s.logOutput.flush(); err == nil {
+				err = flushErr
+			}
+		}
 		s.doneErr = err
 		if msg := s.lastErrMsg(); err != nil && msg != "" {
 			slog.Error("llama-server terminated", "error", err, "exit", ExitStatusFromError(err))
@@ -1368,6 +1375,9 @@ func (s *llamaServerRunner) WaitUntilRunning(ctx context.Context) error {
 
 		switch status {
 		case ServerStatusReady:
+			if s.logOutput != nil {
+				s.logOutput.ready()
+			}
 			if s.status != nil {
 				s.status.SetLastError("")
 			}

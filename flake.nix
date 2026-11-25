@@ -52,7 +52,7 @@
 					};
 				in base.overrideAttrs (finalAttrs: oldAttrs: {
 					pname = "ollama-pmarreck";
-					version = "0.34.4-pmarreck.2";
+					version = "0.34.4-pmarreck.3";
 					src = self;
 
 					# Reuse Nixpkgs' sandbox staging and compatibility patching with
@@ -120,6 +120,26 @@
 				in {
 					inherit cpu;
 					embedding-test-model = embeddingTestModel pkgs;
+					runner-tests = (pkgs.buildGoModule {
+						pname = "ollama-runner-tests";
+						version = "0.34.4-pmarreck.3";
+						src = self;
+						inherit (cpu) vendorHash proxyVendor;
+						doCheck = false;
+						buildPhase = ''
+							runHook preBuild
+							go test -p "$NIX_BUILD_CORES" -c -race -o runner-tests ./llm
+							runHook postBuild
+						'';
+						installPhase = ''
+							runHook preInstall
+							install -Dm755 runner-tests "$out/bin/runner-tests"
+							runHook postInstall
+						'';
+					}).overrideAttrs {
+						# Both suites use the same hash-verified go.mod/go.sum cache.
+						goModules = self.packages.${system}.embedding-tests.goModules;
+					};
 					embedding-tests = pkgs.buildGoModule {
 						pname = "ollama-integration-tests";
 						version = "0.34.4-pmarreck.2";
@@ -128,7 +148,7 @@
 						doCheck = false;
 						buildPhase = ''
 							runHook preBuild
-							go test -c -tags=integration,release -o integration-tests ./integration
+							go test -p "$NIX_BUILD_CORES" -c -tags=integration,release -o integration-tests ./integration
 							runHook postBuild
 						'';
 						installPhase = ''
@@ -161,6 +181,15 @@
 				let pkgs = pkgsFor system;
 				in {
 					build = self.packages.${system}.default;
+					runner-logs = pkgs.runCommand "ollama-runner-log-regression" {
+						__darwinAllowLocalNetworking = true;
+					} ''
+						export HOME="$TMPDIR/home"
+						mkdir -p "$HOME"
+						${self.packages.${system}.runner-tests}/bin/runner-tests \
+							-test.v -test.timeout 5m
+						touch "$out"
+					'';
 					embedding = pkgs.runCommand "ollama-embedding-regression" {
 						__darwinAllowLocalNetworking = true;
 					} ''
@@ -172,6 +201,21 @@
 						${self.packages.${system}.embedding-tests}/bin/integration-tests \
 							-test.run '^TestEmbeddingParallel' -test.v -test.timeout 30m
 					'';
+				} // nixpkgs.lib.optionalAttrs pkgs.stdenv.hostPlatform.isLinux {
+					runner-journal = pkgs.testers.runNixOSTest {
+						name = "ollama-runner-journal";
+						nodes.machine = {
+							virtualisation.memorySize = 2048;
+							virtualisation.cores = 2;
+							environment.etc."ollama-log-test-vm".text = "disposable\n";
+						};
+						# NixOS's standard VM driver only boots the guest and invokes
+						# the Go test; all replay, journal inspection and assertions are Go.
+						testScript = nixpkgs.lib.concatStringsSep "\n" [
+							''machine.wait_for_unit("multi-user.target")''
+							''print(machine.succeed("OLLAMA_LOG_JOURNAL_VM=1 ${self.packages.${system}.runner-tests}/bin/runner-tests -test.run '^TestRunnerJournal$' -test.v -test.timeout 2m"))''
+						];
+					};
 				});
 
 			devShells = forAllSystems (system:
