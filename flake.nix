@@ -54,6 +54,9 @@
 					pname = "ollama-pmarreck";
 					version = "0.34.4-pmarreck.3";
 					src = self;
+					# The fork's Go module graph differs from the nixpkgs package used
+					# as a build template. Keep its verified module cache hash explicit.
+					vendorHash = "sha256-45FfI47tNHBPYOBLRrwuhADCUtkjAhlFrExlEy9piMI=";
 
 					# Reuse Nixpkgs' sandbox staging and compatibility patching with
 					# the llama.cpp revision required by this checkout.
